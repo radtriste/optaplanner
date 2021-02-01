@@ -24,20 +24,20 @@ pipeline {
     options {
         timeout(time: 120, unit: 'MINUTES')
     }
-    
+
     // parameters {
-    // For parameters, check into ./dsl/jobs.groovy file
+    // For parameters, check into .jenkins/dsl/jobs.groovy file
     // }
 
     environment {
-        // Some generated env is also defined into ./dsl/jobs.groovy file
+        // Some generated env is also defined into .jenkins/dsl/jobs.groovy file
 
         MAVEN_OPTS = '-Xms1024m -Xmx4g'
 
         BOT_BRANCH_HASH = "${util.generateHash(10)}"
 
         // Maven configuration
-        MAVEN_DEPLOY_LOCAL_DIR="${WORKSPACE}/maven_deploy_dir"
+        MAVEN_DEPLOY_LOCAL_DIR = "${WORKSPACE}/maven_deploy_dir"
     }
 
     stages {
@@ -46,20 +46,23 @@ pipeline {
                 script {
                     cleanWs()
 
-                    if (params.DISPLAY_NAME != '') {
+                    if (params.DISPLAY_NAME) {
                         currentBuild.displayName = params.DISPLAY_NAME
                     }
 
                     if (isRelease()) {
-                        assert getProjectVersion() != ''
-                        assert getKogitoVersion() != ''
+                        // Verify version is set and if on right release branch
+                        assert getProjectVersion()
+                        assert getKogitoVersion()
+
+                        assert getBuildBranch() == util.getReleaseBranchFromVersion(getProjectVersion())
                     }
                 }
             }
             post {
                 success {
                     script {
-                        setDeployPropertyIfNeeded('git.branch', getGitBranch())
+                        setDeployPropertyIfNeeded('git.branch', getBuildBranch())
                         setDeployPropertyIfNeeded('git.branchQuickstarts', getQuickStartsBranch())
                         setDeployPropertyIfNeeded('git.author', getGitAuthor())
                         setDeployPropertyIfNeeded('project.version', getProjectVersion())
@@ -135,7 +138,7 @@ pipeline {
             }
         }
 
-        stage("Build Vehicle Routing") {
+        stage('Build Vehicle Routing') {
             steps {
                 script {
                     getOptawebVehicleRoutingMavenCommand().skipTests(params.SKIP_TESTS).run('clean install')
@@ -150,7 +153,7 @@ pipeline {
             }
         }
 
-        stage("Build Employee Rostering") {
+        stage('Build Employee Rostering') {
             steps {
                 script {
                     getOptawebEmployeeRosteringMavenCommand().skipTests(params.SKIP_TESTS).run('clean install')
@@ -180,9 +183,9 @@ pipeline {
                 expression { return isRelease() }
             }
             steps {
-                commitAndCreatePR(optaplannerRepository, getGitBranch())
-                commitAndCreatePRIgnoringNpmRegistry(vehicleRoutingRepository, getGitBranch())
-                commitAndCreatePRIgnoringNpmRegistry(employeeRosteringRepository, getGitBranch())
+                commitAndCreatePR(optaplannerRepository, getBuildBranch())
+                commitAndCreatePRIgnoringNpmRegistry(vehicleRoutingRepository, getBuildBranch())
+                commitAndCreatePRIgnoringNpmRegistry(employeeRosteringRepository, getBuildBranch())
                 commitAndCreatePR(quickstartsRepository, getQuickStartsBranch())
             }
             post {
@@ -191,17 +194,17 @@ pipeline {
                         setDeployPropertyIfNeeded("${optaplannerRepository}.pr.source.uri", "https://github.com/${getBotAuthor()}/${optaplannerRepository}")
                         setDeployPropertyIfNeeded("${optaplannerRepository}.pr.source.ref", getBotBranch())
                         setDeployPropertyIfNeeded("${optaplannerRepository}.pr.target.uri", "https://github.com/${getGitAuthor()}/${optaplannerRepository}")
-                        setDeployPropertyIfNeeded("${optaplannerRepository}.pr.target.ref", getGitBranch())
+                        setDeployPropertyIfNeeded("${optaplannerRepository}.pr.target.ref", getBuildBranch())
 
                         setDeployPropertyIfNeeded("${vehicleRoutingRepository}.pr.source.uri", "https://github.com/${getBotAuthor()}/${vehicleRoutingRepository}")
                         setDeployPropertyIfNeeded("${vehicleRoutingRepository}.pr.source.ref", getBotBranch())
                         setDeployPropertyIfNeeded("${vehicleRoutingRepository}.pr.target.uri", "https://github.com/${getGitAuthor()}/${vehicleRoutingRepository}")
-                        setDeployPropertyIfNeeded("${vehicleRoutingRepository}.pr.target.ref", getGitBranch())
+                        setDeployPropertyIfNeeded("${vehicleRoutingRepository}.pr.target.ref", getBuildBranch())
 
                         setDeployPropertyIfNeeded("${employeeRosteringRepository}.pr.source.uri", "https://github.com/${getBotAuthor()}/${employeeRosteringRepository}")
                         setDeployPropertyIfNeeded("${employeeRosteringRepository}.pr.source.ref", getBotBranch())
                         setDeployPropertyIfNeeded("${employeeRosteringRepository}.pr.target.uri", "https://github.com/${getGitAuthor()}/${employeeRosteringRepository}")
-                        setDeployPropertyIfNeeded("${employeeRosteringRepository}.pr.target.ref", getGitBranch())
+                        setDeployPropertyIfNeeded("${employeeRosteringRepository}.pr.target.ref", getBuildBranch())
                     }
                 }
             }
@@ -210,7 +213,7 @@ pipeline {
     post {
         always {
             script {
-                def propertiesStr = deployProperties.collect{ entry ->  "${entry.key}=${entry.value}" }.join("\n")
+                def propertiesStr = deployProperties.collect { entry ->  "${entry.key}=${entry.value}" }.join('\n')
                 writeFile(text: propertiesStr, file: 'deployment.properties')
                 archiveArtifacts(artifacts: 'deployment.properties')
             }
@@ -219,8 +222,8 @@ pipeline {
     }
 }
 
-void updateQuickstartsVersions(){
-    maven.mvnSetVersionProperty(getOptaplannerQuickstartsMavenCommand(), "version.org.optaplanner", getProjectVersion())
+void updateQuickstartsVersions() {
+    maven.mvnSetVersionProperty(getOptaplannerQuickstartsMavenCommand(), 'version.org.optaplanner', getProjectVersion())
     maven.mvnVersionsUpdateParentAndChildModules(getOptaplannerQuickstartsMavenCommand(), getProjectVersion())
     gradleVersionsUpdate(quickstartsRepository, getProjectVersion())
 
@@ -232,13 +235,13 @@ void updateQuickstartsVersions(){
     }
 }
 
-void gradleVersionsUpdate(String repo, String newVersion){
+void gradleVersionsUpdate(String repo, String newVersion) {
     dir(repo) {
         sh "sed -i -E 's/def optaplannerVersion = \"[^\"\\s]+\"/def optaplannerVersion = \"${newVersion}\"/' */build.gradle"
     }
 }
 
-void saveReports(boolean allowEmpty=false){
+void saveReports(boolean allowEmpty=false) {
     junit testResults: '**/target/surefire-reports/**/*.xml, **/target/failsafe-reports/**/*.xml', allowEmptyResults: allowEmpty
 }
 
@@ -246,9 +249,9 @@ void checkoutRepo(String repo, String dirName=repo) {
     dir(dirName) {
         deleteDir()
         if (params.PR_TARGET_BRANCH) {
-            githubscm.checkoutIfExists(repo, getGitAuthor(), getGitBranch(), 'kiegroup', getFallbackBranch(repo), true)
+            githubscm.checkoutIfExists(repo, getGitAuthor(), getBuildBranch(), 'kiegroup', getFallbackBranch(repo), true)
         } else {
-            checkout(githubscm.resolveRepository(repo, getGitAuthor(), getGitBranch(), false))
+            checkout(githubscm.resolveRepository(repo, getGitAuthor(), getBuildBranch(), false))
         }
     }
 }
@@ -282,7 +285,7 @@ void commitAndCreatePR(String repo, String buildBranch) {
         def prBody = "Generated by build ${BUILD_TAG}: ${BUILD_URL}.\nPlease do not merge, it will be merged automatically after testing."
 
         githubscm.commitChanges(commitMsg, {
-            githubscm.findAndStageNotIgnoredFiles('pom.xml') 
+            githubscm.findAndStageNotIgnoredFiles('pom.xml')
             githubscm.findAndStageNotIgnoredFiles('build.gradle')
         })
         githubscm.pushObject('origin', getBotBranch(), getBotAuthorCredsID())
@@ -298,7 +301,7 @@ void commitAndCreatePRIgnoringNpmRegistry(String repo, String buildBranch) {
     commitAndCreatePR(repo, buildBranch)
 }
 
-MavenCommand getMavenDefaultCommand(){
+MavenCommand getMavenDefaultCommand() {
     MavenCommand mvnCmd = new MavenCommand(this, ['-fae']).withSettingsXmlId(env.MAVEN_SETTINGS_CONFIG_FILE_ID)
     if (env.MAVEN_DEPENDENCIES_REPOSITORY) {
         mvnCmd.withDependencyRepositoryInSettings('deps-repo', env.MAVEN_DEPENDENCIES_REPOSITORY)
@@ -306,19 +309,19 @@ MavenCommand getMavenDefaultCommand(){
     return mvnCmd
 }
 
-MavenCommand getOptaplannerMavenCommand(){
+MavenCommand getOptaplannerMavenCommand() {
     return getMavenDefaultCommand().inDirectory(optaplannerRepository).withProperty('full')
 }
 
-MavenCommand getOptaplannerQuickstartsMavenCommand(){
+MavenCommand getOptaplannerQuickstartsMavenCommand() {
     return getMavenDefaultCommand().inDirectory(quickstartsRepository)
 }
 
-MavenCommand getOptawebVehicleRoutingMavenCommand(){
+MavenCommand getOptawebVehicleRoutingMavenCommand() {
     return getMavenDefaultCommand().inDirectory(vehicleRoutingRepository)
 }
 
-MavenCommand getOptawebEmployeeRosteringMavenCommand(){
+MavenCommand getOptawebEmployeeRosteringMavenCommand() {
     return getMavenDefaultCommand().inDirectory(employeeRosteringRepository)
 }
 
@@ -332,12 +335,12 @@ void mavenCleanInstallOptaPlannerParents() {
         .run('clean install')
 }
 
-void deployMavenArtifacts(MavenCommand mvnCmd, String localDeployId){
+void deployMavenArtifacts(MavenCommand mvnCmd, String localDeployId) {
     if (env.MAVEN_DEPLOY_REPOSITORY && env.MAVEN_REPO_CREDS_ID) {
         // Deploy to specific repository with credentials
         runMavenDeployLocally(mvnCmd, localDeployId)
         maven.uploadLocalArtifacts(env.MAVEN_REPO_CREDS_ID, getLocalDeploymentFolder(localDeployId), getMavenRepoZipUrl())
-    } else if(!isRelease() || env.MAVEN_DEPLOY_REPOSITORY){
+    } else if (!isRelease() || env.MAVEN_DEPLOY_REPOSITORY) {
         // Normal deploy
         runMavenDeploy(mvnCmd)
     } else {
@@ -348,9 +351,9 @@ void deployMavenArtifacts(MavenCommand mvnCmd, String localDeployId){
 }
 
 void runMavenDeploy(MavenCommand mvnCmd) {
-    mvnCmd= mvnCmd.clone()
-    
-    if(env.MAVEN_DEPLOY_REPOSITORY) {
+    mvnCmd = mvnCmd.clone()
+
+    if (env.MAVEN_DEPLOY_REPOSITORY) {
         mvnCmd.withDeployRepository(env.MAVEN_DEPLOY_REPOSITORY)
     }
 
@@ -358,7 +361,7 @@ void runMavenDeploy(MavenCommand mvnCmd) {
 }
 
 String getMavenRepoZipUrl() {
-     return "${params.MAVEN_DEPLOY_REPOSITORY.replaceAll('/content/', '/service/local/').replaceFirst('/*$', '')}/content-compressed"
+    return "${params.MAVEN_DEPLOY_REPOSITORY.replaceAll('/content/', '/service/local/').replaceFirst('/*$', '')}/content-compressed"
 }
 
 void runMavenDeployLocally(MavenCommand mvnCmd, String localDeployId) {
@@ -395,7 +398,7 @@ String getGitAuthor() {
     return "${GIT_AUTHOR}"
 }
 
-String getGitBranch() {
+String getBuildBranch() {
     return params.BUILD_BRANCH_NAME
 }
 
@@ -403,24 +406,24 @@ String getKogitoVersion() {
     return params.KOGITO_VERSION
 }
 
-String getProjectVersion(){
+String getProjectVersion() {
     return params.PROJECT_VERSION
 }
 
-String getBotBranch(){
+String getBotBranch() {
     return "${getProjectVersion()}-${env.BOT_BRANCH_HASH}"
 }
 
-String getBotAuthor(){
+String getBotAuthor() {
     return env.GIT_AUTHOR_BOT
 }
 
-String getBotAuthorCredsID(){
+String getBotAuthorCredsID() {
     return env.BOT_CREDENTIALS_ID
 }
 
 void setDeployPropertyIfNeeded(String key, def value) {
-    if (value != null && value != ''){
+    if (value != null && value != '') {
         deployProperties[key] = value
     }
 }
