@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.optaplanner</groupId>
     <artifactId>optaplanner-quarkus-jackson-parent</artifactId>
-    <version>3429.5.0</version>
+    <version>3429.5.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>optaplanner-quarkus-jackson-integration-test</artifactId>
