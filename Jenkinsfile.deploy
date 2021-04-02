@@ -326,10 +326,15 @@ void commitAndCreatePR(String repo, String buildBranch) {
             prBody += '\nPlease review and merge.'
         }
 
-        githubscm.commitChanges(commitMsg, {
-            githubscm.findAndStageNotIgnoredFiles('pom.xml')
-            githubscm.findAndStageNotIgnoredFiles('build.gradle')
-        })
+        try {
+            githubscm.commitChanges(commitMsg, {
+                githubscm.findAndStageNotIgnoredFiles('pom.xml')
+                githubscm.findAndStageNotIgnoredFiles('build.gradle')
+            })   
+        } catch (err) {
+            unstable('[WARN] nothing to commit')
+            return
+        }
         githubscm.pushObject('origin', getBotBranch(), getBotAuthorCredsID())
         deployProperties["${repo}.pr.link"] = githubscm.createPR(commitMsg, prBody, buildBranch, getBotAuthorCredsID())
     }
