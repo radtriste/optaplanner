@@ -12,13 +12,14 @@ kogitoRuntimesRepo = 'kogito-runtimes'
 quarkusRepo = 'quarkus'
 
 pipeline {
-    agent {
-        label 'kie-rhel7 && kie-mem16g'
-    }
-    tools {
-        maven 'kie-maven-3.6.2'
-        jdk 'kie-jdk11'
-    }
+    // agent {
+    //     label 'kie-rhel7 && kie-mem16g'
+    // }
+    agent any
+    // tools {
+    //     maven 'kie-maven-3.6.2'
+    //     jdk 'kie-jdk11'
+    // }
     options {
         timeout(time: 120, unit: 'MINUTES')
     }
@@ -41,70 +42,70 @@ pipeline {
                 }
             }
         }
-        stage('Build quarkus') {
-            when {
-                expression { return getQuarkusBranch() }
-            }
-            steps {
-                script {
-                    checkoutQuarkusRepo()
-                    getMavenCommand(quarkusRepo, false)
-                        .withProperty('quickly')
-                        .run('clean install')
-                }
-            }
-        }
-        stage('Build Kogito Runtimes skipping tests') {
-            steps {
-                script {
-                    getMavenCommand(kogitoRuntimesRepo)
-                        .skipTests(true)
-                        .withProperty('skipITs', true)
-                        .run('clean install')
-                }
-            }
-        }
-        stage('Build OptaPlanner') {
-            steps {
-                script {
-                    mvnCmd = getMavenCommand(optaplannerRepo, true, true)
-                        .withProperty('full')
-                    if(isNormalPRCheck()) {
-                        mvnCmd.withProfiles(['run-code-coverage'])
-                    }
-                    mvnCmd.run('clean install')
-                }
-            }
-        }
-        stage('Analyze OptaPlanner by SonarCloud') {
-            when {
-                expression { isNormalPRCheck() }
-            }
-            steps {
-                script {
-                    withCredentials([string(credentialsId: 'SONARCLOUD_TOKEN', variable: 'SONARCLOUD_TOKEN')]) {
-                        getMavenCommand(optaplannerRepo)
-                                .withOptions(['-e', '-nsu'])
-                                .withProperty('sonar.projectKey', 'org.optaplanner:optaplanner')
-                                .withProfiles(['sonarcloud-analysis'])
-                                .run('validate')
-                    }
-                }
-            }
-        }
-        stage('Build OptaPlanner Quickstarts') {
-            steps {
-                script {
-                    getMavenCommand(quickstartsRepo, true, true)
-                        .run('clean install')
-                }
-            }
-        }
+        // stage('Build quarkus') {
+        //     when {
+        //         expression { return getQuarkusBranch() }
+        //     }
+        //     steps {
+        //         script {
+        //             checkoutQuarkusRepo()
+        //             getMavenCommand(quarkusRepo, false)
+        //                 .withProperty('quickly')
+        //                 .run('clean install')
+        //         }
+        //     }
+        // }
+        // stage('Build Kogito Runtimes skipping tests') {
+        //     steps {
+        //         script {
+        //             getMavenCommand(kogitoRuntimesRepo)
+        //                 .skipTests(true)
+        //                 .withProperty('skipITs', true)
+        //                 .run('clean install')
+        //         }
+        //     }
+        // }
+        // stage('Build OptaPlanner') {
+        //     steps {
+        //         script {
+        //             mvnCmd = getMavenCommand(optaplannerRepo, true, true)
+        //                 .withProperty('full')
+        //             if(isNormalPRCheck()) {
+        //                 mvnCmd.withProfiles(['run-code-coverage'])
+        //             }
+        //             mvnCmd.run('clean install')
+        //         }
+        //     }
+        // }
+        // stage('Analyze OptaPlanner by SonarCloud') {
+        //     when {
+        //         expression { isNormalPRCheck() }
+        //     }
+        //     steps {
+        //         script {
+        //             withCredentials([string(credentialsId: 'SONARCLOUD_TOKEN', variable: 'SONARCLOUD_TOKEN')]) {
+        //                 getMavenCommand(optaplannerRepo)
+        //                         .withOptions(['-e', '-nsu'])
+        //                         .withProperty('sonar.projectKey', 'org.optaplanner:optaplanner')
+        //                         .withProfiles(['sonarcloud-analysis'])
+        //                         .run('validate')
+        //             }
+        //         }
+        //     }
+        // }
+        // stage('Build OptaPlanner Quickstarts') {
+        //     steps {
+        //         script {
+        //             getMavenCommand(quickstartsRepo, true, true)
+        //                 .run('clean install')
+        //         }
+        //     }
+        // }
     }
     post {
         always {
             sh '$WORKSPACE/trace.sh'
-            junit '**/target/surefire-reports/**/*.xml, **/target/failsafe-reports/**/*.xml'
+            // junit '**/target/surefire-reports/**/*.xml, **/target/failsafe-reports/**/*.xml'
         }
         failure {
             script {
